@@ -41,4 +41,4 @@ jobs:
         name: ScrcpyForAndroid-signed-release
         path: |
           app/build/outputs/apk/scrcpy/release/*.apk
-        retention-days: 90  # Sets the artifact retention period to 90 days.
+        retention-days: 90  # Sets the artifact retention period to 90 days. 
