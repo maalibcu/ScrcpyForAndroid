@@ -81,6 +81,23 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
     private Scrcpy scrcpy;
     private long timestamp = 0;
 
+    private UsbBroadcastReceiver usbReceiver;
+    private boolean useUsbConnection = false;
+    private UsbDevice selectedUsbDevice = null;
+    private UsbBroadcastReceiver usbReceiver;
+    private boolean useUsbConnection = false;
+    private UsbDevice selectedUsbDevice = null;
+    private ArrayAdapter<String> usbDeviceAdapter;
+    private List<String> usbDeviceList = new ArrayList<>();
+    private Map<String, UsbDevice> usbDeviceMap = new HashMap<>();
+
+    private RadioGroup radioGroupConnectionType;
+    private LinearLayout layoutUsbDevices;
+    private LinearLayout layoutServerAddress;
+    private Spinner spinnerUsbDevices;
+    private TextView textUsbStatus;
+    private Button buttonRefreshUsb;
+
     // private byte[] fileBase64;
     private LinearLayout linearLayout;
 
@@ -144,6 +161,9 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
 
     // userDisconnect ：是否为用户手动断开连接
     private void showMainView(boolean userDisconnect) {
+        if (usbReceiver != null) {
+            usbReceiver.unregister(this);
+        }
         if (scrcpy != null) {
             scrcpy.StopService();
         }
@@ -191,6 +211,33 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
             Log.e("Scrcpy: ", "from onCreate");
             start_screen_copy_magic();
         }
+        usbReceiver = new UsbBroadcastReceiver();
+        usbReceiver.setCallback(new UsbBroadcastReceiver.UsbDeviceCallback() {
+            @Override
+            public void onUsbDeviceAttached(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Device Attached", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+
+            @Override
+            public void onUsbDeviceDetached(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Device Detached", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+
+            @Override
+            public void onUsbDevicePermissionGranted(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Permission Granted", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+        });
+        usbReceiver.register(this);
         sensorManager = (SensorManager) this.getSystemService(SENSOR_SERVICE);
         Sensor proximity;
         proximity = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
@@ -232,6 +279,132 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
         outState.putInt("screenWidth", screenWidth);
     }
 
+    private void setupUsbUi() {
+        // Get UI references
+        radioGroupConnectionType = findViewById(R.id.radio_group_connection_type);
+        layoutUsbDevices = findViewById(R.id.layout_usb_devices);
+        layoutServerAddress = findViewById(R.id.layout_server_address);
+        spinnerUsbDevices = findViewById(R.id.spinner_usb_devices);
+        textUsbStatus = findViewById(R.id.text_usb_status);
+        buttonRefreshUsb = findViewById(R.id.button_refresh_usb);
+
+        // Setup USB device spinner adapter
+        usbDeviceAdapter = new ArrayAdapter<>(this, 
+            android.R.layout.simple_spinner_item, usbDeviceList);
+        usbDeviceAdapter.setDropDownViewResource(
+            android.R.layout.simple_spinner_dropdown_item);
+        spinnerUsbDevices.setAdapter(usbDeviceAdapter);
+
+        // Setup USB broadcast receiver
+        usbReceiver = new UsbBroadcastReceiver();
+        usbReceiver.setCallback(new UsbBroadcastReceiver.UsbDeviceCallback() {
+            @Override
+            public void onUsbDeviceAttached(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Device Attached", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+
+            @Override
+            public void onUsbDeviceDetached(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Device Detached", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+
+            @Override
+            public void onUsbDevicePermissionGranted(UsbDevice device) {
+                runOnUiThread(() -> {
+                    Toast.makeText(context, "USB Permission Granted", Toast.LENGTH_SHORT).show();
+                    updateUsbDeviceList();
+                });
+            }
+        });
+        usbReceiver.register(this);
+
+        // Setup connection type radio buttons
+        radioGroupConnectionType.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == R.id.radio_tcp) {
+                useUsbConnection = false;
+                layoutUsbDevices.setVisibility(View.GONE);
+                layoutServerAddress.setVisibility(View.VISIBLE);
+            } else if (checkedId == R.id.radio_usb) {
+                useUsbConnection = true;
+                layoutUsbDevices.setVisibility(View.VISIBLE);
+                layoutServerAddress.setVisibility(View.GONE);
+                updateUsbDeviceList();
+            }
+        });
+
+        // Setup USB device selection
+        spinnerUsbDevices.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String deviceKey = usbDeviceList.get(position);
+                selectedUsbDevice = usbDeviceMap.get(deviceKey);
+                Log.i("USB", "Selected device: " + deviceKey);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                selectedUsbDevice = null;
+            }
+        });
+
+        // Setup refresh button
+        buttonRefreshUsb.setOnClickListener(v -> {
+            updateUsbDeviceList();
+            Toast.makeText(context, "Refreshing USB devices...", Toast.LENGTH_SHORT).show();
+        });
+
+        // Initial USB device scan
+        updateUsbDeviceList();
+    }
+
+    // Method to update USB device list
+    private void updateUsbDeviceList() {
+        if (usbReceiver == null) return;
+
+        usbDeviceList.clear();
+        usbDeviceMap.clear();
+
+        ConcurrentHashMap<String, UsbDevice> devices = usbReceiver.getUsbDevices();
+        
+        if (devices.isEmpty()) {
+            usbDeviceList.add("No USB devices found");
+            textUsbStatus.setText("No USB devices connected");
+            textUsbStatus.setTextColor(0xFFA8AAB5); // Gray
+            selectedUsbDevice = null;
+        } else {
+            for (Map.Entry<String, UsbDevice> entry : devices.entrySet()) {
+                String serial = entry.getKey();
+                UsbDevice device = entry.getValue();
+                
+                String displayName;
+                if (device.getProductName() != null) {
+                    displayName = device.getProductName() + " (" + serial + ")";
+                } else {
+                    displayName = device.getDeviceName() + " - " + serial;
+                }
+                
+                usbDeviceList.add(displayName);
+                usbDeviceMap.put(displayName, device);
+            }
+            
+            textUsbStatus.setText(devices.size() + " device(s) found");
+            textUsbStatus.setTextColor(0xFF4CAF50); // Green
+            
+            // Auto-select first device
+            if (!usbDeviceList.isEmpty()) {
+                selectedUsbDevice = usbDeviceMap.get(usbDeviceList.get(0));
+            }
+        }
+        
+        usbDeviceAdapter.notifyDataSetChanged();
+    }
+
     @SuppressLint("SourceLockedOrientationActivity")
     public void scrcpy_main() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -246,6 +419,7 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
         setContentView(R.layout.activity_main);
         final Button startButton = findViewById(R.id.button_start);
         // final Button floatButton = findViewById(R.id.button_start_float);
+        setupUsbUi();
 
         sendCommands = new SendCommands();
 
@@ -277,6 +451,83 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
             }
         }
     }
+    private int sendCommandsUsb(Context context, UsbDevice usbDevice, int bitrate, int size) {
+        try {
+            // This would need a custom implementation similar to SendCommands
+            // but using UsbChannel instead of TCP
+            SendCommandsUsb usbCommands = new SendCommandsUsb();
+            return usbCommands.sendAdbCommandsUsb(
+                context, 
+                usbDevice, 
+                Scrcpy.LOCAL_FORWART_PORT,
+                Scrcpy.LOCAL_IP,
+                bitrate, 
+                size
+            );
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 1;
+        }
+    }
+    private void connectViaUsb(UsbDevice usbDevice) {
+        Progress.showDialog(MainActivity.this, getString(R.string.please_wait));
+        ThreadUtils.workPost(() -> {
+            AssetManager assetManager = getAssets();
+            try {
+                // Copy scrcpy-server.jar
+                Log.d("Scrcpy", "Preparing scrcpy-server.jar for USB");
+                InputStream inputStream = assetManager.open("scrcpy-server.jar");
+                byte[] buffer = new byte[inputStream.available()];
+                inputStream.read(buffer);
+                
+                File scrcpyDir = context.getExternalFilesDir("scrcpy");
+                if (!scrcpyDir.exists()) {
+                    scrcpyDir.mkdirs();
+                }
+                
+                FileOutputStream outputStream = new FileOutputStream(
+                    new File(context.getExternalFilesDir("scrcpy"), "scrcpy-server.jar")
+                );
+                outputStream.write(buffer);
+                outputStream.flush();
+                outputStream.close();
+                inputStream.close();
+
+                // Use USB ADB commands
+                SendCommandsUsb usbCommands = new SendCommandsUsb();
+                if (usbCommands.sendAdbCommandsUsb(
+                        context, 
+                        usbDevice, 
+                        Scrcpy.LOCAL_FORWART_PORT,
+                        Scrcpy.LOCAL_IP,
+                        videoBitrate, 
+                        Math.max(screenHeight, screenWidth)) == 0) {
+                    ThreadUtils.post(() -> {
+                        if (!MainActivity.this.isFinishing()) {
+                            Log.e("Scrcpy", "USB connection established");
+                            start_screen_copy_magic();
+                        }
+                    });
+                } else {
+                    ThreadUtils.post(Progress::closeDialog);
+                    ThreadUtils.post(() -> 
+                        Toast.makeText(context, "USB ADB connection failed", Toast.LENGTH_SHORT).show()
+                    );
+                    connectExitExt();
+                }
+            } catch (Exception e) {
+                Log.e("Scrcpy", "USB connection error", e);
+                ThreadUtils.post(Progress::closeDialog);
+                ThreadUtils.post(() -> 
+                    Toast.makeText(context, "Failed to connect via USB: " + e.getMessage(), 
+                        Toast.LENGTH_SHORT).show()
+                );
+                connectExitExt();
+            }
+        });
+    }
+    }
+
 
     private void showListPopulWindow(EditText mEditText) {
         String[] list = getHistoryList();//要填充的数据
@@ -736,7 +987,14 @@ public class MainActivity extends Activity implements Scrcpy.ServiceCallbacks, S
     }
 
     private void connectScrcpyServer(String serverAdr) {
-        if (!TextUtils.isEmpty(serverAdr)) {
+        if (useUsbConnection) {
+            // Use USB connection
+            if (selectedUsbDevice == null) {
+                Toast.makeText(context, "No USB device selected", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            connectViaUsb(selectedUsbDevice);
+        } else if (!TextUtils.isEmpty(serverAdr)) {
             saveHistory(serverAdr);  // 保存到历史记录
             String[] serverInfo = Util.getServerHostAndPort(serverAdr);
             String serverHost = serverInfo[0];

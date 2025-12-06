@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -20,6 +21,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     @SuppressLint("StaticFieldLeak")
     public static Context mContext;
+    
+    // Add USB Manager
+    public static UsbManager usbManager;
 
     private final static LinkedList<Activity> activityList = new LinkedList<Activity>();
 
@@ -28,8 +32,11 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public void onCreate() {
         super.onCreate();
-        init();  // 初始化id 数据
+        init();
         startAdbServer();
+        
+        // Initialize USB Manager
+        usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
     }
 
     @Override
@@ -47,7 +54,6 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     public static Activity getCurActivity() {
-        // 获取最新的一个 activity
         try {
             return activityList.getFirst();
         } catch (Exception ignore) {
@@ -56,24 +62,20 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     /**
-     * 启动 adb 服务
+     * Start ADB service
      */
     public static void startAdbServer() {
         if (startAdbRun) {
-            // 当前正在启动过程中，退出
             return;
         }
         startAdbRun = true;
         ThreadUtils.execute(() -> {
-            // 启动 adb 服务
             Log.i("Scrcpy", "start adb server ...");
             adbCmd("kill-server");
             adbCmd("start-server");
-            // 启动完毕，重置为false，使其下次可以被重新调用
             startAdbRun = false;
         });
     }
-
 
     public static String adbCmd(String... cmd) {
         if (cmd == null) {
@@ -97,29 +99,19 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     @Override
-    public void onActivityStarted(Activity activity) {
-
-    }
+    public void onActivityStarted(Activity activity) {}
 
     @Override
-    public void onActivityResumed(Activity activity) {
-
-    }
+    public void onActivityResumed(Activity activity) {}
 
     @Override
-    public void onActivityPaused(Activity activity) {
-
-    }
+    public void onActivityPaused(Activity activity) {}
 
     @Override
-    public void onActivityStopped(Activity activity) {
-
-    }
+    public void onActivityStopped(Activity activity) {}
 
     @Override
-    public void onActivitySaveInstanceState(Activity activity, Bundle outState) {
-
-    }
+    public void onActivitySaveInstanceState(Activity activity, Bundle outState) {}
 
     @Override
     public void onActivityDestroyed(Activity activity) {
