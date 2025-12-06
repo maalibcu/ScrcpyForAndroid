@@ -1,4 +1,4 @@
-package org.client.scrcpy.adb;
+package org.client.scrcpy;
 
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;

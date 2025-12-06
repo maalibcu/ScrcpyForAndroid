@@ -38,7 +38,7 @@ public class UsbBroadcastReceiver extends BroadcastReceiver {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         filter.addAction(ACTION_USB_PERMISSION);
         
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= 33) {
             context.registerReceiver(this, filter, Context.RECEIVER_EXPORTED);
         } else {
             context.registerReceiver(this, filter);

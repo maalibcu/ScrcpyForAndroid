@@ -1,11 +1,15 @@
-package org.client.scrcpy.adb;
+package org.client.scrcpy;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public interface AdbChannel {
-    void write(ByteBuffer data) throws IOException;
-    ByteBuffer read(int size) throws InterruptedException, IOException;
-    void flush();
+    void write(ByteBuffer data) throws IOException, InterruptedException;
+
+    void flush() throws IOException;
+
+    ByteBuffer read(int size) throws IOException, InterruptedException;
+
     void close();
+
 }
